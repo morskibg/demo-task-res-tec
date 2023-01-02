@@ -8,5 +8,8 @@
 Used package is "RapidFuzz", which is considerably faster than the notorious "fuzzywuzzy" package (https://pythonrepo.com/repo/maxbachmann-RapidFuzz-python-general-utilities)
 ## Instaling dependencies 
 ### There are two possiblle approaches 
-#### 1. Creating venv with `python -m venv venv`
+#### 1. Creating venv with `python -m venv venv`, activate and then `pip install -r requirements.txt`
+#### 2. Using pipenv - `pip install pipenv`, `pipenv install --dev` and activate `pipenv shell` from project directory.
+## Running script
+### from root project directory run `python run.py`
 
