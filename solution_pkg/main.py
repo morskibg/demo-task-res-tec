@@ -15,6 +15,5 @@ def main():
     users_addresses_df['PreprocAddress'] = users_addresses_df['Address'].map(preprocess_address)    
     matched_addresses_df = create_matching_addresses_df(users_addresses_df)
     grouped_df = create_grouped_by_address_df(matched_addresses_df)
-    print(grouped_df)
     csv_file_writer(grouped_df, OUTPUT_FILE_NAME)
 
