@@ -8,5 +8,5 @@
 Used package is "RapidFuzz", which is considerably faster than the notorious "fuzzywuzzy" package (https://pythonrepo.com/repo/maxbachmann-RapidFuzz-python-general-utilities)
 ## Instaling dependencies 
 ### There are two possiblle approaches 
-#### 1. Creating venv with python -m venv venv
+#### 1. Creating venv with `python -m venv venv`
 
