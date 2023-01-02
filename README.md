@@ -11,5 +11,5 @@ Used package is "RapidFuzz", which is considerably faster than the notorious "fu
 #### 1. Creating venv with `python -m venv venv`, activate and then `pip install -r requirements.txt`
 #### 2. Using pipenv - `pip install pipenv`, `pipenv install --dev` and activate `pipenv shell` from project directory.
 ## Running script
-### from root project directory run `python run.py`
+### From root project directory run `python run.py`
 
