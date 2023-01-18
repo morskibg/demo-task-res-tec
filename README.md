@@ -13,4 +13,5 @@ Used package is "RapidFuzz", which is considerably faster than the notorious "fu
 ## Running script
 ### From root project directory run `python run.py`. On first run files 'result.csv' and 'log.log' should be created.
 ## Previously used approach is totally wrong, so new one is propposed, based on Google Places API !
+#### Just add .env fike with valid google API (.env_sample is example how .env should look like)
 
