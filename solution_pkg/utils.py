@@ -1,16 +1,24 @@
-from typing import List,  Dict, Union, Callable
+from typing import List,  Dict, Union, Callable, Tuple
 import os
 import re
+from dotenv import load_dotenv
+import googlemaps
 import pandas as pd
 from pathlib import Path
 import json
 from transliterate import translit
 from rapidfuzz import fuzz
+import googlemaps
 
 from .logger import get_logger
 from .constanst import SUB_MAPPERS_FOLDER, FUZZ_WRATIO_TRESHOLD
 
 logger = get_logger(__name__)
+
+load_dotenv()
+
+API_KEY = os.getenv('API_KEY')
+googlemaps_client = googlemaps.Client(key = API_KEY)
 
 def csv_reader(file_name: str) -> pd.DataFrame: 
     """Reading csv file from current working directory and provided file name.
@@ -132,8 +140,9 @@ def create_matching_addresses_df(df: pd.DataFrame) -> pd.DataFrame:
     """    
     unique_addresses = df['PreprocAddress'].unique()
     addr_dict = {}
-    for addr in unique_addresses:
-        if addr in addr_dict or addr in addr_dict.values():
+    proceeded_addresses = set()
+    for addr in unique_addresses:       
+        if addr in proceeded_addresses:
             continue
         for k in list(addr_dict.keys()):
             if fuzz.WRatio(k, addr) >= FUZZ_WRATIO_TRESHOLD:
@@ -142,21 +151,24 @@ def create_matching_addresses_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             addr_dict[addr] = [addr]
 
+        proceeded_addresses.add(addr)
+
     inverse_addr_dict = { v: k for k, l in addr_dict.items() for v in l }
     df['AddressMapping'] = df['PreprocAddress'].map(inverse_addr_dict)
     return df 
 
-def create_grouped_by_address_df(df: pd.DataFrame) -> pd.DataFrame:
+def create_grouped_by_address_df(df: pd.DataFrame, group_by_name: str = 'AddressMapping') -> pd.DataFrame:
     """Grouping by 'AddressMapping' column and ordering 
 
     Args:
         df (pd.Dataframe): dataframe with added similar addresses column
+        group_by_name (str): column name to group by
 
     Returns:
         df (pd.Dataframe): dataframe with users sorted by name and grouped by address
     """    
     grouped_df = (
-        df.groupby('AddressMapping')['Name']
+        df.groupby(group_by_name)['Name']
             .agg(lambda x: ", ".join(sorted(list(x))))
             .to_frame()
             .sort_values(by='Name')           
@@ -174,3 +186,42 @@ def csv_file_writer(df: pd.DataFrame, file_name: str) -> None:
         df.to_csv(Path(os.getcwd()).joinpath(file_name), index=False, header=False, sep = ';')
     except Exception as ex:
         logger.error(f'Error saving csv file\n{ex}')
+
+def google_maps_address_finder(googlemaps_client: googlemaps.Client, raw_address: str) -> Tuple[str,...]:
+    """Searching for address by google's Places API
+
+    Args:
+        googlemaps_client (googlemaps.Client): python client for google maps services
+        raw_address (str): raw address
+
+    Returns:
+        Tuple[str,...]: _description_
+    """    
+    place_search_result_dict = googlemaps_client.find_place(
+        input = raw_address,
+        input_type  = "textquery",
+        fields = ["formatted_address", "place_id"],
+        language = 'en-US',
+    ) 
+    tupl_to_return = (None,) * 3    
+    if place_search_result_dict['status'] == 'OK':
+        candidates = place_search_result_dict.get('candidates')
+        if candidates:
+            tupl_to_return = (candidates[0]['formatted_address'], candidates[0]['place_id'], place_search_result_dict['status'])
+    return tupl_to_return
+    
+
+def create_matching_addresses_by_google_api_df(df:pd.DataFrame) -> pd.DataFrame:
+    """Adding 3 additional columns to initialy read users_addresses dataframe ('formatted_address', 'place_id', 'status')
+
+    Args:
+        df (pd.DataFrame): input dataframe read from csv file
+
+    Returns:
+        pd.DataFrame: modified users_addresses
+    """    
+    df[['formatted_address','place_id','status']] = df['Address'].apply(lambda x:google_maps_address_finder(googlemaps_client, x)).to_list()
+    return df
+    
+    
+

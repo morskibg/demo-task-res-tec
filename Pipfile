@@ -7,6 +7,8 @@ name = "pypi"
 pandas = "*"
 transliterate = "*"
 rapidfuzz = "*"
+googlemaps = "*"
+python-dotenv = "*"
 
 [dev-packages]
 pytest = "*"

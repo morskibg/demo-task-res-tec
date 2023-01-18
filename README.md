@@ -12,4 +12,5 @@ Used package is "RapidFuzz", which is considerably faster than the notorious "fu
 #### 2. Using pipenv - `pip install pipenv`, `pipenv install --dev` and activate `pipenv shell` from project directory.
 ## Running script
 ### From root project directory run `python run.py`. On first run files 'result.csv' and 'log.log' should be created.
+## Previously used approach is totally wrong, so new one is propposed, based on Google Places API !
 
