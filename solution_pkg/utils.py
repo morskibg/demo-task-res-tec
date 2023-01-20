@@ -1,5 +1,6 @@
 from typing import List,  Dict, Union, Callable, Tuple
 import os
+import uuid
 import re
 from dotenv import load_dotenv
 import googlemaps
@@ -11,7 +12,8 @@ from rapidfuzz import fuzz
 import googlemaps
 
 from .logger import get_logger
-from .constanst import SUB_MAPPERS_FOLDER, FUZZ_WRATIO_TRESHOLD
+from .constanst import SUB_MAPPERS_FOLDER, FUZZ_TRESHOLD
+
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,7 @@ def csv_reader(file_name: str) -> pd.DataFrame:
     """    
     try:
         df = pd.read_csv(Path(os.getcwd()).joinpath(file_name))
+        df.columns = ['name','raw_address']
         return df
     except FileNotFoundError as ex:
         logger.error(f'Missing input csv file.\n{ex}')
@@ -85,15 +88,14 @@ def create_aggr_substitute_mapping(mappers_dir: str) -> Union[Dict, Dict[str, st
         logger.warning('Empty substitite mapper will be used !')
     return aggr_mapper
 
-def preprocess_address(
+def clean_address_raw_str(
         input_addr: str,
         aggregated_sub_mapper:
             Callable[[str], Union[Dict, Dict[str, str]]] = create_aggr_substitute_mapping(SUB_MAPPERS_FOLDER)) -> str:
-    """Prepocess function called for every input address. Stages:
+    """Clean function called for every input address. Stages:
     1. Split whole address line by ',' and remove leading and trailing white spaces from tokens.
-    2. Replace multiple whitespaces inside token with single one.
-    3. Transliterate from cyrillic (bg) to latin (if address is in cirillyc)  
-    4. Split token by space and tries to find and replace every single splited part with value from mapping dict.
+    2. Replace multiple whitespaces inside token with single one.      
+    3. Split token by space and tries to find and replace every single splited part with value from mapping dict.
 
     Args:
         input_addr (str): address
@@ -102,50 +104,36 @@ def preprocess_address(
 
     Returns:
         str: modified address
-    """    
+    """  
+     
     tokens = list(map(str.strip, input_addr.split(',')))  
-    prepocessed = []
+    cleaned = []
     for token in tokens:
         token = translit(re.sub(r'\s{2,}',' ', token.lower()), 'bg', reversed=True)
         substituted =[aggregated_sub_mapper.get(x) if aggregated_sub_mapper.get(x) else x for x in token.split(' ')]
-        prepocessed.append(" ".join(substituted))
-    return ",".join(prepocessed)
+        cleaned.append(" ".join(substituted))
+    return ",".join(cleaned)
 
 
-def create_matching_addresses_df(df: pd.DataFrame) -> pd.DataFrame:    
+def create_raw_matching_addresses_df(df: pd.DataFrame, column_name: str = 'cleaned_addr') -> pd.DataFrame:    
     """Create dictionary from all unique preprocessed addresses by comparing one to 
-    all others and evaluating is fuzz WRatio exeeds defined treshold. {
-        1. Take the ratio of the two processed strings (fuzz.ratio)
-        2. Run checks to compare the length of the strings
-        * If one of the strings is more than 1.5 times as long as the other
-        use partial_ratio comparisons - scale partial results by 0.9
-        (this makes sure only full results can return 100)
-        * If one of the strings is over 8 times as long as the other
-        instead scale by 0.6
-        3. Run the other ratio functions
-        * if using partial ratio functions call partial_ratio,
-        partial_token_sort_ratio and partial_token_set_ratio
-        scale all of these by the ratio based on length
-        * otherwise call token_sort_ratio and token_set_ratio
-        * all token based comparisons are scaled by 0.95
-        (on top of any partial scalars)
-        4. Take the highest value from these results
-        round it and return it as an integer.
-        }
+    all others and evaluating is result from 'fuzz.token_set_ratio() exeeds defined treshold. 'token_set_ratio' function tokenize the strings,
+    sorts the strings alphabetically, takes out the common tokens and then joins them together. Then, the fuzz.ratio() is calculated.
     Args:
         df (pd.DataFrame): preprocessed input dataframe
-
+        column_name (str): name of the cleaned addresses column 
     Returns:
         pd.DataFrame: preprocessed input dataframe with added column "AddressMapping" for founded similar addresses
-    """    
-    unique_addresses = df['PreprocAddress'].unique()
+    """   
+    
+    unique_addresses = df[column_name].unique()
     addr_dict = {}
     proceeded_addresses = set()
     for addr in unique_addresses:       
         if addr in proceeded_addresses:
             continue
-        for k in list(addr_dict.keys()):
-            if fuzz.WRatio(k, addr) >= FUZZ_WRATIO_TRESHOLD:
+        for k in list(addr_dict.keys()):            
+            if fuzz.token_set_ratio(k, addr) >= FUZZ_TRESHOLD:                             
                 addr_dict[k].append(addr)
                 break
         else:
@@ -154,11 +142,16 @@ def create_matching_addresses_df(df: pd.DataFrame) -> pd.DataFrame:
         proceeded_addresses.add(addr)
 
     inverse_addr_dict = { v: k for k, l in addr_dict.items() for v in l }
-    df['AddressMapping'] = df['PreprocAddress'].map(inverse_addr_dict)
+    
+    def get_value_and_index_by_key(cleaned_addr: str) -> Tuple[str, int]:
+        return inverse_addr_dict[cleaned_addr], list(inverse_addr_dict.keys()).index(inverse_addr_dict[cleaned_addr])
+    
+    df[['raw_mapped_addr','idx']] = df['cleaned_addr'].map(get_value_and_index_by_key).to_list()   
+    
     return df 
 
-def create_grouped_by_address_df(df: pd.DataFrame, group_by_name: str = 'AddressMapping') -> pd.DataFrame:
-    """Grouping by 'AddressMapping' column and ordering 
+def create_grouped_by_address_df(df: pd.DataFrame, group_by_name: str = 'place_id', name_str: str = 'name') -> pd.DataFrame:
+    """Grouping by 'place_id' column and ordering 
 
     Args:
         df (pd.Dataframe): dataframe with added similar addresses column
@@ -168,10 +161,10 @@ def create_grouped_by_address_df(df: pd.DataFrame, group_by_name: str = 'Address
         df (pd.Dataframe): dataframe with users sorted by name and grouped by address
     """    
     grouped_df = (
-        df.groupby(group_by_name)['Name']
+        df.groupby(group_by_name)[name_str]
             .agg(lambda x: ", ".join(sorted(list(x))))
             .to_frame()
-            .sort_values(by='Name')           
+            .sort_values(by = name_str)           
     )
     return grouped_df
 
@@ -203,15 +196,16 @@ def google_maps_address_finder(googlemaps_client: googlemaps.Client, raw_address
         fields = ["formatted_address", "place_id"],
         language = 'en-US',
     ) 
-    tupl_to_return = (None,) * 3    
+    tupl_to_return = (None, None, place_search_result_dict["status"])    
+    
     if place_search_result_dict['status'] == 'OK':
-        candidates = place_search_result_dict.get('candidates')
+        candidates = place_search_result_dict.get('candidates')        
         if candidates:
             tupl_to_return = (candidates[0]['formatted_address'], candidates[0]['place_id'], place_search_result_dict['status'])
-    return tupl_to_return
+    return tupl_to_return    
     
 
-def create_matching_addresses_by_google_api_df(df:pd.DataFrame) -> pd.DataFrame:
+def create_matching_addresses_by_google_api_df(df:pd.DataFrame, column_name: str = 'raw_address') -> pd.DataFrame:
     """Adding 3 additional columns to initialy read users_addresses dataframe ('formatted_address', 'place_id', 'status')
 
     Args:
@@ -220,7 +214,10 @@ def create_matching_addresses_by_google_api_df(df:pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: modified users_addresses
     """    
-    df[['formatted_address','place_id','status']] = df['Address'].apply(lambda x:google_maps_address_finder(googlemaps_client, x)).to_list()
+    df = df.copy(deep=False)
+    df[['formatted_address', 'place_id', 'status']] = df[column_name].apply(
+        lambda x:google_maps_address_finder(googlemaps_client, x)).to_list()
+    
     return df
     
     
