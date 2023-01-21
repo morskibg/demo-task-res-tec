@@ -1,17 +1,19 @@
 # demo-task-res-tec
-## Simple solution to find similiarities between addresses.
-### The concept of Levenshtein Distance sometimes also called as Minimum Edit distance is a popular metric used to measure the distance between two strings. 
-### It is calculated by counting number of edits required to transform one string into another. The edits could be one of the following:
-#### Addition of a new letter.
-#### Removal of a letter.
-#### Substitution.
-Used package is "RapidFuzz", which is considerably faster than the notorious "fuzzywuzzy" package (https://pythonrepo.com/repo/maxbachmann-RapidFuzz-python-general-utilities)
+## Simple solution to find and sort by name people with equal addresses.
+### For raw address matching is used function `token_set_ratio()` from package "RapidFuzz". The string is tokenized and then, 
+### sorting and then pasting the tokens back together, token_set_ratio performs a set operation that 
+### takes out the common tokens (the intersection) and then makes fuzz.ratio() pairwise comparisons 
+### between the following new strings:
+### s1 = Sorted_tokens_in_intersection
+### s2 = Sorted_tokens_in_intersection + sorted_rest_of_str1_tokens
+### s3 = Sorted_tokens_in_intersection + sorted_rest_of_str2_tokens
+### Then the Google Places API with unique addresses is used for final address matching. 
+### The initial matchig with `token_set_ratio()` helps to reduce calls to Google's API, if matches are found.
 ## Instaling dependencies 
 ### There are two possiblle approaches 
 #### 1. Creating venv with `python -m venv venv`, activate and then `pip install -r requirements.txt`
 #### 2. Using pipenv - `pip install pipenv`, `pipenv install --dev` and activate `pipenv shell` from project directory.
 ## Running script
 ### From root project directory run `python run.py`. On first run files 'result.csv' and 'log.log' should be created.
-## Previously used approach is totally wrong, so new one is propposed, based on Google Places API !
-#### Just add .env fike with valid google API (.env_sample is example how .env should look like)
+
 
